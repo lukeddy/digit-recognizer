@@ -29,7 +29,7 @@ export default defineConfig({
       { text: '项目篇', link: '/chapter-08-project-overview' },
       {
         text: '源码',
-        link: 'https://github.com/hefeng6500/digit-recognizer',
+        link: 'https://github.com/leonyangdev/digit-recognizer',
       },
     ],
 
@@ -74,7 +74,7 @@ export default defineConfig({
     socialLinks: [
       {
         icon: 'github',
-        link: 'https://github.com/hefeng6500/digit-recognizer',
+        link: 'https://github.com/leonyangdev/digit-recognizer',
       },
     ],
 
@@ -125,7 +125,7 @@ export default defineConfig({
     // 编辑链接（可选）
     editLink: {
       pattern:
-        'https://github.com/hefeng6500/digit-recognizer/edit/main/book/:path',
+        'https://github.com/leonyangdev/digit-recognizer/edit/main/book/:path',
       text: '在 GitHub 上编辑此页',
     },
 

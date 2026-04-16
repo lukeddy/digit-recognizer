@@ -14,7 +14,7 @@ hero:
       link: /README
     - theme: alt
       text: GitHub 源码
-      link: https://github.com/hefeng6500/digit-recognizer
+      link: https://github.com/leonyangdev/digit-recognizer
 
 features:
   - icon: 🧠
