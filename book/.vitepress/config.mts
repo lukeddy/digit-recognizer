@@ -81,7 +81,7 @@ export default defineConfig({
     // 页脚
     footer: {
       message: '基于 Kaggle MNIST 数据集，使用纯 numpy 从零实现',
-      copyright: 'Copyright © 2024 · 以 MIT 协议开源',
+      copyright: 'Copyright © 2026 · 以 MIT 协议开源',
     },
 
     // 右侧文章目录
