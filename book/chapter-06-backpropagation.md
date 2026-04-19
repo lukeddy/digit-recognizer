@@ -1,325 +1,193 @@
 # 第 6 章：反向传播
 
-> 这是整本小册子最核心的章节。反向传播是神经网络训练的引擎，理解它意味着你真正理解了深度学习的本质。
+> 💡 **导读：** 这是整本小册子最核心的章节。反向传播是神经网络训练的引擎，理解它，意味着你真正摸到了深度学习的底层脉络。
 
 ## 6.1 问题：参数如何更新？
 
-训练的目标是让损失 $L$ 尽可能小。我们有 39,760 个参数（W1, b1, W2, b2），每次计算完损失后，需要知道：
+训练的终极目标是让损失函数的值尽可能小。我们目前有 39,760 个参数（$W_1, b_1, W_2, b_2$），每次前向传播计算出损失后，我们需要弄清楚一个核心问题：
 
-> **每个参数应该增大还是减小，才能让 L 减小？**
+> **这 3 万多个参数里，每一个参数是应该稍微增大一点，还是减小一点，才能让总损失降下来？**
 
-答案就是**梯度**（Gradient）：$\frac{\partial L}{\partial \theta}$
 
-梯度告诉我们，当参数 $\theta$ 增大一点点时，$L$ 会如何变化：
-- 梯度 > 0：L 随 $\theta$ 增大而增大 → 应该**减小** $\theta$
-- 梯度 < 0：L 随 $\theta$ 增大而减小 → 应该**增大** $\theta$
-- 梯度 = 0：当前参数处于极值点
 
-**反向传播**就是高效计算所有参数梯度的算法。
+解开这个问题的钥匙就是**梯度**（Gradient）。梯度，简单来说就是函数的“坡度”：
+
+* **梯度 > 0**：说明损失随参数增大而增大 $\rightarrow$ 我们应该**减小**该参数。
+* **梯度 < 0**：说明损失随参数增大而减小 $\rightarrow$ 我们应该**增大**该参数。
+* **梯度 = 0**：恭喜，当前参数已经处于谷底（极值点）。
+
+**反向传播（Backpropagation）**，就是一套能够一次性、极其高效地算出身兼数万职的参数们各自梯度的算法。
 
 ---
 
-## 6.2 链式法则：反向传播的数学基础
+## 6.2 链式法则：反向传播的底层逻辑
 
-反向传播的核心数学工具是**链式法则**（Chain Rule）。
+反向传播听起来高大上，但它的核心数学工具你高中就学过——**链式法则**。
 
-### 6.2.1 单变量链式法则
+### 6.2.1 直观理解：工厂流水线
 
-如果 $z = f(y)$，$y = g(x)$，即 $z = f(g(x))$，那么：
+想象一个工厂流水线：原材料 $x \rightarrow$ 半成品 $y \rightarrow$ 最终产品 $z$
+
+* 当 $x$ 变化 1 个单位时，$y$ 会跟着变化 2 个单位。
+* 当 $y$ 变化 1 个单位时，$z$ 会跟着变化 3 个单位。
+* 那么，当 $x$ 变化 1 个单位时，$z$ 会变化多少？答案显而易见：$2 \times 3 = 6$ 个单位。
+
+这就是链式法则：
 
 $$\frac{dz}{dx} = \frac{dz}{dy} \cdot \frac{dy}{dx}$$
 
-### 6.2.2 直观理解
+**反向传播，就是把这条“链条”从最右边（最终损失）向最左边（输入参数）依次乘回去。**
 
-想象一个工厂流水线：$x \rightarrow y \rightarrow z$
+### 6.2.2 神经网络中的计算图
 
-- 当 x 变化 1 单位时，y 变化 $\frac{dy}{dx}$ 单位
-- 当 y 变化 1 单位时，z 变化 $\frac{dz}{dy}$ 单位
-- 所以当 x 变化 1 单位时，z 变化 $\frac{dy}{dx} \times \frac{dz}{dy}$ 单位
 
-**反向传播就是把这个"链条"从右到左依次计算。**
 
-### 6.2.3 在神经网络中
+我们的网络是一条流水线（从左到右）：
 
-我们的计算图（从左到右）：
+$$X \rightarrow [a_1] \rightarrow [z_1] \rightarrow [a_2] \rightarrow [y] \rightarrow [L]$$
 
-```
-X → [a1 = X@W1+b1] → [z1 = σ(a1)] → [a2 = z1@W2+b2] → [y = softmax(a2)] → [L]
-```
+反向传播则是时光倒流（从右到左），计算每个节点对最终 Loss 的责任大小：
 
-反向传播（从右到左）计算每个参数对 L 的贡献：
-
-```
-L → ∂L/∂a2 → ∂L/∂z1 → ∂L/∂a1 → ∂L/∂W1, ∂L/∂b1
-              ↓
-          ∂L/∂W2, ∂L/∂b2
-```
+$$L \rightarrow \frac{\partial L}{\partial a_2} \rightarrow \frac{\partial L}{\partial z_1} \rightarrow \frac{\partial L}{\partial a_1} \rightarrow \frac{\partial L}{\partial W_1}$$
 
 ---
 
-## 6.3 符号约定
+## 6.3 符号约定（请务必牢记）
 
-为了简洁，我们用简写：
+为了后续推导不被繁杂的符号淹没，我们统一使用简写。**记住一个黄金规律：一个变量的梯度矩阵，形状永远和它自己一模一样！**
 
-| 简写 | 完整含义 |
-|------|----------|
-| $dy$ | $\frac{\partial L}{\partial a_2}$，shape `(n, 10)` |
-| $dz_1$ | $\frac{\partial L}{\partial z_1}$，shape `(n, 50)` |
-| $da_1$ | $\frac{\partial L}{\partial a_1}$，shape `(n, 50)` |
-| $dW_2$ | $\frac{\partial L}{\partial W_2}$，shape `(50, 10)` |
-| $db_2$ | $\frac{\partial L}{\partial b_2}$，shape `(10,)` |
-| $dW_1$ | $\frac{\partial L}{\partial W_1}$，shape `(784, 50)` |
-| $db_1$ | $\frac{\partial L}{\partial b_1}$，shape `(50,)` |
+| 变量含义 | 梯度简写 | 数学表达 | 矩阵形状 (Shape) |
+| :--- | :--- | :--- | :--- |
+| 第二层线性输出 | $dy$ | $\frac{\partial L}{\partial a_2}$ | `(n, 10)` |
+| 第一层激活输出 | $dz_1$ | $\frac{\partial L}{\partial z_1}$ | `(n, 50)` |
+| 第一层线性输出 | $da_1$ | $\frac{\partial L}{\partial a_1}$ | `(n, 50)` |
+| 第二层权重参数 | $dW_2$ | $\frac{\partial L}{\partial W_2}$ | `(50, 10)` |
+| 第二层偏置参数 | $db_2$ | $\frac{\partial L}{\partial b_2}$ | `(10,)` |
+| 第一层权重参数 | $dW_1$ | $\frac{\partial L}{\partial W_1}$ | `(784, 50)` |
+| 第一层偏置参数 | $db_1$ | $\frac{\partial L}{\partial b_1}$ | `(50,)` |
+
+*(注：$n$ 为批量样本大小)*
 
 ---
 
-## 6.4 第一步：输出层梯度（Softmax + Cross-Entropy 联合推导）
+## 6.4 第一步：输出层梯度（全书最精彩的推导）
 
-这是最精彩的部分。我们要推导 $\frac{\partial L}{\partial a_2}$。
+我们要推导整个反向传播的源头：$dy$，也就是损失对最后一层输出的梯度。
+由于最后一层是 Softmax 激活加上交叉熵损失，这两个函数通常被绑定在一起求导，因为它们结合后会产生奇妙的“化学反应”。
 
-### 6.4.1 设置
 
-- $a_2 \in \mathbb{R}^{n \times 10}$：第二层线性输出
-- $y = \text{softmax}(a_2)$，$y \in \mathbb{R}^{n \times 10}$
-- $L = -\frac{1}{n}\sum_{i=1}^{n} \log(y[i, t[i]])$
 
-我们只关注**单个样本**（下标 $i$ 省略），之后除以 $n$ 即可。
+### 6.4.1 拆解问题
+我们先只看**单个样本**。
+* 预测概率：$y = \text{softmax}(a_2)$
+* 交叉熵损失：$\ell = -\log(y_t)$ （其中 $t$ 是真实标签所在的索引）
 
-单个样本的损失：$\ell = -\log(y_{t})$，其中 $y_t = y[t]$ 是正确类别的预测概率。
+### 6.4.2 为什么 Softmax 求导要分情况？
 
-### 6.4.2 对 softmax 输出 y 的梯度
+Softmax 的特点是“牵一发而动全身”。它的公式是 $y_j = \frac{e^{a_j}}{\sum_k e^{a_k}}$。
+你稍微改变某一个输入分数 $a_s$，不仅会影响它自己的概率 $y_s$，还会因为分母变了，**挤压**到其他所有类别的概率 $y_j$。
 
-$$\frac{\partial \ell}{\partial y_j} = \begin{cases} -\frac{1}{y_t} & j = t \\ 0 & j \neq t \end{cases}$$
+利用高中的商的求导法则，我们对输入 $a_s$ 求偏导：
 
-因为 $\ell = -\log(y_t)$，只和 $y_t$ 有关，对其他 $y_j$ 的偏导为 0。
+**情况 A：自己对自己（当 $j = s$ 时）**
+改变正确类别的分数，会促使自身概率增加，但增速会放缓：
+$$\frac{\partial y_s}{\partial a_s} = y_s(1 - y_s)$$
 
-### 6.4.3 softmax 对输入 a₂ 的导数
+**情况 B：自己对别人（当 $j \neq s$ 时）**
+改变某个类别的分数，会抢占别人的概率空间，所以是负数：
+$$\frac{\partial y_j}{\partial a_s} = -y_j \cdot y_s$$
 
-softmax 的输出 $y_j = \frac{e^{a_j}}{\sum_k e^{a_k}}$
+### 6.4.3 奇迹发生的时刻（链式法则组合）
 
-对输入 $a_s$ 求偏导（分两种情况，因为 $\sum_k e^{a_k}$ 包含 $a_s$）：
-
-**当 $j = s$ 时（同一个位置）：**
-
-用商的求导法则，令 $S = \sum_k e^{a_k}$：
-
-$$\frac{\partial y_j}{\partial a_s} = \frac{e^{a_s} \cdot S - e^{a_s} \cdot e^{a_s}}{S^2} = \frac{e^{a_s}}{S} - \frac{e^{a_s}}{S}\cdot\frac{e^{a_s}}{S} = y_j - y_j^2 = y_j(1 - y_j)$$
-
-**当 $j \neq s$ 时（不同位置）：**
-
-$$\frac{\partial y_j}{\partial a_s} = \frac{0 \cdot S - e^{a_j} \cdot e^{a_s}}{S^2} = -\frac{e^{a_j}}{S}\cdot\frac{e^{a_s}}{S} = -y_j \cdot y_s$$
-
-### 6.4.4 联合推导（链式法则）
-
+根据链式法则，输入 $a_s$ 对最终损失 $\ell$ 的影响，是它对**所有**输出概率影响的加总：
 $$\frac{\partial \ell}{\partial a_s} = \sum_{j=0}^{9} \frac{\partial \ell}{\partial y_j} \cdot \frac{\partial y_j}{\partial a_s}$$
 
-把求和拆开，$j = t$ 和 $j \neq t$ 两部分：
+但是！交叉熵损失 $\ell = -\log(y_t)$ 有一个极美的特性：**它只关心正确标签 $t$ 的概率，对其他错误分类毫不关心**。所以，当 $j \neq t$ 时，第一项偏导数直接为 $0$。
 
-$$= \frac{\partial \ell}{\partial y_t} \cdot \frac{\partial y_t}{\partial a_s} + \sum_{j \neq t} \frac{\partial \ell}{\partial y_j} \cdot \frac{\partial y_j}{\partial a_s}$$
+上面那个长长的求和公式瞬间坍塌，只剩下一项（即 $j = t$ 时）：
+$$\frac{\partial \ell}{\partial a_s} = \left(-\frac{1}{y_t}\right) \cdot \frac{\partial y_t}{\partial a_s}$$
 
-代入刚才求的偏导（注意 $j \neq t$ 时 $\frac{\partial \ell}{\partial y_j} = 0$，所以第二项消掉）：
+现在，把我们在 6.4.2 算出的结果代入进去：
+* 如果 $s = t$（你在对正确类别的分数求导）：梯度 = $y_t - 1$
+* 如果 $s \neq t$（你在对错误类别的分数求导）：梯度 = $y_s - 0 = y_s$
 
-$$= \left(-\frac{1}{y_t}\right) \cdot \frac{\partial y_t}{\partial a_s} + 0$$
+### 6.4.4 合并为极简公式
 
-**情况1：$s = t$（对正确类别的输入求导）：**
+无论是正确类别还是错误类别，梯度都可以用一句话概括：
+**梯度 = 网络的预测概率 - 它的真实标签值 (One-hot 编码)**
 
-$$\frac{\partial \ell}{\partial a_t} = -\frac{1}{y_t} \cdot y_t(1 - y_t) = -(1 - y_t) = y_t - 1$$
+推广到 $n$ 个样本的批量矩阵中（除以 $n$ 求平均）：
 
-**情况2：$s \neq t$（对其他类别的输入求导）：**
+$$dy = \frac{1}{n}(y - T)$$
 
-$$\frac{\partial \ell}{\partial a_s} = -\frac{1}{y_t} \cdot (-y_t \cdot y_s) = y_s$$
-
-### 6.4.5 合并成一个公式
-
-$$\frac{\partial \ell}{\partial a_j} = \begin{cases} y_j - 1 & j = t \\ y_j & j \neq t \end{cases} = y_j - \mathbf{1}[j = t]$$
-
-其中 $\mathbf{1}[j = t]$ 是指示函数：当 $j = t$ 时等于 1，否则等于 0。
-
-用向量形式（对单个样本）：
-
-$$\frac{\partial \ell}{\partial \mathbf{a}_2} = \mathbf{y} - \mathbf{e}_t$$
-
-其中 $\mathbf{e}_t$ 是第 $t$ 个位置为 1 的 one-hot 向量。
-
-### 6.4.6 推广到批量（除以 n）
-
-对 $n$ 个样本求平均损失，对应梯度也除以 $n$：
-
-$$\boxed{dy = \frac{\partial L}{\partial a_2} = \frac{1}{n}(y - T)}$$
-
-其中 $T$ 是 one-hot 标签矩阵，shape `(n, 10)`，$T[i, t[i]] = 1$，其余为 0。
-
-**代码实现：**
-
+**代码实现直译：**
 ```python
 n = X.shape[0]
-dy = y.copy()             # shape (n, 10)，先复制预测概率
-dy[np.arange(n), t] -= 1  # 正确类别的位置减 1
-dy /= n                   # 除以批量大小得平均梯度
+dy = y.copy()             # 先拿到预测概率
+dy[np.arange(n), t] -= 1  # 遇到正确类别的那个位置，减去 1
+dy /= n                   # 除以批量大小取平均
 ```
-
-**这段代码几乎是数学公式的直译！**
+*看！推导虽然千难万险，但代码却只有优雅的三行。这就是数学的魅力。*
 
 ---
 
 ## 6.5 第二步：第二层参数的梯度
 
-已知 $dy = \frac{\partial L}{\partial a_2}$，shape `(n, 10)`。
+源头梯度 $dy$ 拿到了，我们继续往回传。
+前向传播公式：$a_2 = z_1 \cdot W_2 + b_2$
 
-前向传播：$a_2 = z_1 \cdot W_2 + b_2$
+### W₂ 的梯度（为什么需要转置？）
 
-### W₂ 的梯度
-
-对于矩阵乘法 $a_2 = z_1 \cdot W_2$，利用矩阵微积分的结论（这里给出结论，附完整证明）：
+结论先行：
 
 $$\frac{\partial L}{\partial W_2} = z_1^T \cdot dy$$
 
-**维度验证：**
-```
-z1.T @ dy:
-z1.T: (50, n)
-dy:   (n, 10)
-结果: (50, 10)    ← 和 W2 的 shape 相同 ✓
-```
-
-**直观理解：** 如果 $z_1$ 中某个特征值很大（它的激活程度高），而 $dy$ 中对应的梯度也大，那么 $W_2$ 中连接它们的权重对损失影响大，因此梯度也应该大。转置是为了对齐维度。
-
-**矩阵梯度的完整推导（选读）：**
-
-考虑 $a_2$ 的第 $i$ 行第 $j$ 列：
-
-$$a_2[i, j] = \sum_{k} z_1[i, k] \cdot W_2[k, j]$$
-
-对 $W_2[p, q]$ 求偏导：
-
-$$\frac{\partial a_2[i, j]}{\partial W_2[p, q]} = \begin{cases} z_1[i, p] & j = q \\ 0 & j \neq q \end{cases}$$
-
-所以：
-
-$$\frac{\partial L}{\partial W_2[p, q]} = \sum_{i, j} \frac{\partial L}{\partial a_2[i, j]} \cdot \frac{\partial a_2[i, j]}{\partial W_2[p, q]} = \sum_{i} dy[i, q] \cdot z_1[i, p]$$
-
-写成矩阵形式：$\frac{\partial L}{\partial W_2} = z_1^T \cdot dy$，即 shape `(50, n) @ (n, 10) = (50, 10)` ✓
+**直观理解：** 想象一根连接隐藏层节点和输出层节点的电线。这根电线的权重 $W_2$ 该怎么调？取决于两点：
+1. 它的输入端 $z_1$ 信号有多强？（特征激活度）
+2. 它的输出端 $dy$ 迫切需要多少改变？（误差梯度）
+两者相乘即为权重的调整量。矩阵转置 $z_1^T$ 仅仅是为了让形状能够正确相乘：`(50, n) @ (n, 10) = (50, 10)`，完美匹配 $W_2$ 的形状！
 
 ### b₂ 的梯度
-
-前向传播是 $a_2 = \text{(某矩阵)} + b_2$（广播加法），对每个样本都加了同一个 $b_2$。
-
-所以 $b_2$ 的梯度是把 $n$ 个样本的梯度**对行求和**：
+偏置 $b_2$ 在前向传播中是被“广播”加到每一个样本上的。所以反向传播时，我们只需要把 $n$ 个样本在这个节点上的梯度**全部累加**起来即可：
 
 $$\frac{\partial L}{\partial b_2} = \sum_{i=1}^{n} dy[i, :] = \text{np.sum}(dy, \text{axis=0})$$
 
-**维度验证：**
-```
-np.sum(dy, axis=0):
-dy: (n, 10), 对 n 行求和 → (10,)   ← 和 b2 的 shape 相同 ✓
-```
-
-### 传回隐藏层的梯度
-
-前向传播：$a_2 = z_1 \cdot W_2$，利用对称的矩阵微积分结论：
+### 传给隐藏层的接力棒
+为了让第一层也能更新，我们需要把梯度继续回传给 $z_1$：
 
 $$\frac{\partial L}{\partial z_1} = dy \cdot W_2^T$$
-
-**维度验证：**
-```
-dy @ W2.T:
-dy:   (n, 10)
-W2.T: (10, 50)   ← W2 的转置
-结果: (n, 50)    ← 和 z1 的 shape 相同 ✓
-```
-
-**直观理解：** 每个隐藏节点 $z_1[i, k]$ 的梯度 = 它影响的所有输出节点梯度的加权和（权重就是 $W_2$）。转置是因为方向反了。
+*维度验证：`(n, 10) @ (10, 50) = (n, 50)` ✓*
 
 ---
 
-## 6.6 第三步：隐藏层的梯度（Sigmoid 反向传播）
+## 6.6 第三步：隐藏层的梯度（Sigmoid 穿透）
 
-已知 $dz_1 = \frac{\partial L}{\partial z_1}$，shape `(n, 50)`。
-
+现在梯度来到了第一层的激活函数。
 前向传播：$z_1 = \sigma(a_1)$
 
-根据链式法则：
+Sigmoid 函数的导数非常漂亮，可以用它自己的输出来表示：$\sigma' = z_1(1 - z_1)$。
+因为激活函数是逐元素（element-wise）操作的，这里不需要复杂的矩阵乘法，直接**对应位置相乘**即可：
 
-$$\frac{\partial L}{\partial a_1} = \frac{\partial L}{\partial z_1} \cdot \frac{\partial z_1}{\partial a_1}$$
-
-$z_1$ 是对 $a_1$ 逐元素应用 sigmoid，所以 $\frac{\partial z_1[i,j]}{\partial a_1[i,j]} = \sigma'(a_1[i,j]) = z_1[i,j](1 - z_1[i,j])$
-
-写成矩阵形式（逐元素乘法）：
-
-$$da_1 = dz_1 \cdot (z_1 \cdot (1 - z_1))$$
+$$da_1 = dz_1 \odot (z_1 \odot (1 - z_1))$$
 
 ```python
-da1 = dz1 * sigmoid_grad(z1)    # 逐元素乘，shape不变
-# sigmoid_grad(z1) = z1 * (1 - z1)
-```
-
-**维度验证：**
-```
-dz1:             (n, 50)
-sigmoid_grad(z1): (n, 50)   ← z1 是 sigmoid 输出，shape 和 a1 一样
-da1:             (n, 50)    ← 逐元素乘，shape不变 ✓
+da1 = dz1 * (z1 * (1 - z1))  # numpy 中的 * 就是逐元素相乘
 ```
 
 ---
 
 ## 6.7 第四步：第一层参数的梯度
 
-已知 $da_1$，前向传播是 $a_1 = X \cdot W_1 + b_1$，与第二层完全对称：
+这就完全是第二层（6.5节）的复读机了，公式极其对称：
 
 $$dW_1 = X^T \cdot da_1$$
-
-**维度验证：**
-```
-X.T @ da1:
-X.T:  (784, n)
-da1:  (n, 50)
-结果: (784, 50)   ← 和 W1 的 shape 相同 ✓
-```
-
 $$db_1 = \text{np.sum}(da_1, \text{axis=0})$$
 
-**维度验证：**
-```
-np.sum(da1, axis=0):
-da1: (n, 50), 对 n 行求和 → (50,)   ← 和 b1 的 shape 相同 ✓
-```
-
 ---
 
-## 6.8 完整反向传播总结
+## 6.8 完整代码实现逐行解析
 
-前向传播（左 → 右）：
-
-```
-X(n,784) → a1(n,50) → z1(n,50) → a2(n,10) → y(n,10) → L(标量)
-```
-
-反向传播（右 → 左）：
-
-```
-① 输出层（softmax + 交叉熵联合）：
-   dy = (y - T) / n                        shape: (n, 10)
-
-② 第二层参数：
-   dW2 = z1.T @ dy                         shape: (50, 10)  ← 和 W2 相同
-   db2 = sum(dy, axis=0)                   shape: (10,)     ← 和 b2 相同
-
-③ 向上传梯度：
-   dz1 = dy @ W2.T                         shape: (n, 50)   ← 和 z1 相同
-
-④ sigmoid 反向：
-   da1 = dz1 * z1*(1-z1)                   shape: (n, 50)   ← 和 a1 相同
-
-⑤ 第一层参数：
-   dW1 = X.T @ da1                         shape: (784, 50) ← 和 W1 相同
-   db1 = sum(da1, axis=0)                  shape: (50,)     ← 和 b1 相同
-```
-
-**黄金规律：每个参数的梯度形状，永远和该参数本身的形状相同。**
-
----
-
-## 6.9 代码实现逐行解析
+把上面的推导拼起来，你会发现反向传播的代码有一种难言的对称美：
 
 ```python
 def _backprop_gradient(self, X, t):
@@ -327,69 +195,47 @@ def _backprop_gradient(self, X, t):
     W1, b1 = self.params['W1'], self.params['b1']
     W2, b2 = self.params['W2'], self.params['b2']
 
-    # ① 前向传播（缓存中间值，反向用）
-    a1 = X @ W1 + b1          # (n, 50)
-    z1 = sigmoid(a1)           # (n, 50)
-    a2 = z1 @ W2 + b2          # (n, 10)
-    y  = softmax(a2)           # (n, 10)
+    # ================= 前向传播 =================
+    a1 = X @ W1 + b1               # (n, 50)
+    z1 = sigmoid(a1)               # (n, 50)
+    a2 = z1 @ W2 + b2              # (n, 10)
+    y  = softmax(a2)               # (n, 10)
 
-    # ② 输出层梯度（softmax + cross-entropy 联合）
-    dy = y.copy()              # (n, 10)
-    dy[np.arange(n), t] -= 1  # 正确类别位置 -1（构造 y - T）
-    dy /= n                    # 除以 n 取平均
+    # ================= 反向传播 =================
+    # ① 最后一层源头梯度 (Softmax + 交叉熵)
+    dy = y.copy()
+    dy[np.arange(n), t] -= 1       # (n, 10)
+    dy /= n
 
-    # ③ 第二层参数梯度
-    dW2 = z1.T @ dy            # (50,n)@(n,10) = (50,10)
-    db2 = np.sum(dy, axis=0)   # (10,)
+    # ② 第二层参数梯度
+    dW2 = z1.T @ dy                # (50, 10)
+    db2 = np.sum(dy, axis=0)       # (10,)
 
-    # ④ 梯度传回隐藏层
-    dz1 = dy @ W2.T            # (n,10)@(10,50) = (n,50)
+    # ③ 梯度回传穿过第二层线性层
+    dz1 = dy @ W2.T                # (n, 50)
 
-    # ⑤ sigmoid 反向传播
-    da1 = dz1 * sigmoid_grad(z1)  # (n,50) ⊙ (n,50) = (n,50)
+    # ④ 梯度回传穿过 Sigmoid 激活函数
+    da1 = dz1 * (z1 * (1 - z1))    # (n, 50)
 
-    # ⑥ 第一层参数梯度
-    dW1 = X.T @ da1            # (784,n)@(n,50) = (784,50)
-    db1 = np.sum(da1, axis=0)  # (50,)
+    # ⑤ 第一层参数梯度
+    dW1 = X.T @ da1                # (784, 50)
+    db1 = np.sum(da1, axis=0)      # (50,)
 
     return {'W1': dW1, 'b1': db1, 'W2': dW2, 'b2': db2}
 ```
 
 ---
 
-## 6.10 数值梯度 vs 反向传播
+## 6.9 为什么不用数值梯度？
 
-### 数值梯度（验证用）
-
-用中心差分法近似导数：
+你可能会问：既然可以通过微小的变化 $h$ 来近似计算导数（数值梯度），为什么还要费劲推导反向传播？
 
 $$\frac{\partial L}{\partial \theta_i} \approx \frac{L(\theta_i + h) - L(\theta_i - h)}{2h}$$
 
-- 对**每个参数**，分别做两次前向传播
-- 39,760 个参数 → 约 80,000 次前向传播
-- 慢，但无需手动推导，用于**验证反向传播是否正确**
+* **数值梯度：** 要更新 39,760 个参数，你需要做近 **80,000 次**前向传播。慢如蜗牛，但代码好写，通常只用来**做测试，验证反向传播代码是否写错了**。
+* **反向传播：** 只需要 **1 次**前向传播 + **1 次**反向计算。速度快约 1000 倍。这是工业界实际训练的唯一方案。
 
-### 反向传播
-
-- 只需**一次**前向传播 + **一次**反向传播
-- 速度快约 1000 倍
-- 是实际训练所用的方法
-
----
-
-## 6.11 小结
-
-| 步骤 | 公式 | Shape |
-|------|------|-------|
-| 输出层梯度 | `dy = (y - T) / n` | `(n, 10)` |
-| dW2 | `z1.T @ dy` | `(50, 10)` |
-| db2 | `sum(dy, axis=0)` | `(10,)` |
-| 传回梯度 | `dz1 = dy @ W2.T` | `(n, 50)` |
-| sigmoid 反传 | `da1 = dz1 * z1*(1-z1)` | `(n, 50)` |
-| dW1 | `X.T @ da1` | `(784, 50)` |
-| db1 | `sum(da1, axis=0)` | `(50,)` |
-
-> **下一章**：有了梯度，怎么用它来更新参数？SGD、Momentum、Adam 三种策略。
+> **下一章预告**：现在我们拿到了所有参数的“指导意见”（梯度），接下来该怎么走？SGD、Momentum、Adam 等各种高级“走法”即将登场。
 
 ---
 
