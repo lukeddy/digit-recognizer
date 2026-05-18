@@ -58,7 +58,18 @@ main.py
 ## 2. 快速运行
 
 ```bash
+git clone https://github.com/leonyangdev/digit-recognizer.git
 cd digit_recognizer
+
+# 准备数据
+mkdir data
+# 去下面的地址下载训练数据并保存到data目录：
+open https://www.kaggle.com/c/digit-recognizer/data
+
+# 安装依赖库
+pip install scikit-learn numpy pandas matplotlib
+
+# 启动
 python main.py
 ```
 
